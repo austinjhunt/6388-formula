@@ -1,0 +1,402 @@
+/* CS 6388 Homework 4 Due July 10, 2022
+Austin J Hunt
+*/
+
+/*
+Task 1) Family
+Create a FORMULA domain for representing families:
+-	Create new-kind constructors to represent Person.
+-	Create a new-kind relationship Parent among two persons who are in child-parent relationship.
+-	Add a conformance rule that enforces that a Person has at most 2 Parents.
+*/
+
+
+domain Family {
+    // create constructor to represent a person
+    Person ::= new (name: String).
+    // create constructor to represent parent relationship among 2 persons who are in parent-child relationship
+    // can be thought of as a directed edge from child to parent
+    Parent ::= new (child: Person, parent: Person).
+
+    // conformance rule enforcing that person has at most 2 parents
+    // aka no person has more than 2 parents
+    // for each child person, count number of parents, return true if > 2
+    hasMoreThanTwoParents :- child is Person, count({parent | parent is Person(_), Parent(child, parent)}) > 2.
+    conforms no hasMoreThanTwoParents.
+
+}
+
+model MyGoodFamily of Family {
+    // this conforms
+    ginger is Person("Ginger").
+    don is Person("Donald").
+    janice is Person("Janice").
+    lisa is Person("Lisa").
+    ron is Person("Ron").
+    austin is Person("Austin").
+
+    parentRel1 is Parent(austin, ron).
+    parentRel2 is Parent(austin, lisa).
+    parentRel3 is Parent(lisa, janice).
+    parentRel4 is Parent(ron, don).
+    parentRel5 is Parent(ron, ginger).
+}
+
+model MyBadFamily of Family {
+    // this does not conform. ron has 3 parents.
+    ginger is Person("Ginger").
+    don is Person("Donald").
+    arnold is Person("Arnold").
+    janice is Person("Janice").
+    lisa is Person("Lisa").
+    ron is Person("Ron").
+    austin is Person("Austin").
+
+    parentRel1 is Parent(austin, ron).
+    parentRel2 is Parent(austin, lisa).
+    parentRel3 is Parent(lisa, janice).
+    parentRel4 is Parent(ron, don).
+    parentRel5 is Parent(ron, ginger).
+    parentRel6 is Parent(ron, arnold).
+}
+
+/* execute the following to test model conformity
+query MyGoodFamily Family.conforms
+query MyBadFamily Family.conforms
+*/
+
+
+
+/*
+Task 2) AlgTree
+Using the AlgTrees domain from the FORMULA manual (Example 2.4 on page 21),
+add a constraint that checks if a tree is not higher/deeper than 2 levels.
+
+*/
+
+domain AlgTrees {
+    Node ::= new (left: any Node + {NIL}, right: any Node + {NIL}).
+    Root ::= new (root: any Node).
+
+    // relationship indicating first node has the second node as either left or right child
+    parent ::= (n1: Node, n2: Node + {NIL}).
+    parent(n1, n2) :- n1 is Node(_, n2);  n1 is Node(n2, _).
+
+    // define the height of the tree
+    height ::= (n: Node + {NIL}, h: Integer).
+    height(n, h) :- n is Node(_, _), r is Root(n), h = 0.
+    height(n, h) :- n is Node(_, _), height(m, x), parent(m, n), h = x + 1.
+
+    // if height is between 3 ..... m
+    // then height(n, [1,2,3,....m]) will be true.
+    heightMoreThanTwo :- height(n, d), d > 2.
+
+    conforms no heightMoreThanTwo.
+}
+
+model BadTree of AlgTrees {
+    n4 is Node(NIL, NIL).
+    n3 is Node(n4, NIL).
+    n2 is Node(NIL, n3).
+    n1 is Node(n2, NIL).
+    n0 is Node(n1, NIL).
+    r is Root(n0).
+}
+
+model GoodTree of AlgTrees {
+    n2 is Node(NIL, NIL).
+    n1 is Node(n2, NIL).
+    n0 is Node(n1, NIL).
+    r is Root(n0).
+}
+
+/*
+execute the following to test model conformity.
+query BadTree AlgTrees.conforms
+query GoodTree AlgTrees.conforms
+*/
+
+/* while the above two are properly
+classified as non-conformant models,
+the below are not properly classified.
+i believe it's because defining the entire tree
+as one single value starting at Root(...)
+breaks the constraint defined in the domain.
+I am not sure how to fix that.
+*/
+
+model GoodTree1Level of AlgTrees {
+    Root(
+        Node(
+            Node(NIL, NIL),
+            Node(NIL, NIL)
+        )
+    ).
+}
+model GoodTree2Levels of AlgTrees {
+    // 2 levels
+    Root(
+        Node(
+            Node(
+                Node(NIL, NIL), NIL),
+            Node(NIL, NIL)
+        )
+    ).
+}
+model BadTree3Levels of AlgTrees {
+    // 3 levels
+    Root(
+        Node(
+            Node(
+                Node(
+                    Node(NIL, NIL),
+                    NIL),
+                Node(NIL, NIL)
+            ),
+            Node(NIL, NIL)
+        )
+    ).
+}
+model BadTree4 of AlgTrees {
+    Root(
+        Node(
+            Node(
+                Node(
+                    Node(NIL, NIL),
+                    NIL),
+                Node(NIL, NIL)
+            ),
+            Node(
+                Node(
+                    Node(
+                        Node(NIL, NIL),
+                         NIL),
+                    NIL),
+                Node(NIL, NIL)
+            )
+        )
+    ).
+}
+/*
+execute the following to test model conformity.
+query BadTree AlgTrees.conforms
+query GoodTree1Level AlgTrees.conforms
+query GoodTree2Levels AlgTrees.conforms
+query BadTree3Levels AlgTrees.conforms
+query BadTree4 AlgTrees.conforms
+*/
+
+/* Task 3) FSM
+Create a FORMULA domain to represent finite state machines:
+-	States should use an integer identifier.
+-	Directed Transitions should be a relation between states.
+-	Final and Initial states should take a State parameter.
+-	Conformance rules must check for:
+o	There is exactly one initial state.
+o	From the initial state it is possible to reach at least one final state.
+o	Any state is reachable from the initial state
+    (if we assume that a node is reachable from itself,
+    otherwise every node except the initial state must be reachable)
+*/
+
+domain FSM {
+    State ::= new (id: Integer).
+    Transition ::= new (src: State, dest: State).
+    Final ::= new (finalState: State).
+    Initial ::= new (initState: State).
+
+    // There is exactly one initial state.
+    exactlyOneInitial :- count({init | init is Initial}) = 1.
+    conforms exactlyOneInitial.
+
+    // from the initial state it is possible to reach at least one final state.
+    path ::= (src: Initial + State, dest: Final + State).
+    // there's either a direct transition from init to final or there is a path of transitions from init to final
+    path(init, final) :- i is State, f is State, init is Initial(i), final is Final(f), Transition(i, f) ;
+                        i is State, f is State, init is Initial(i), final is Final(f), intermediate is State, Transition(i, intermediate), path(intermediate, f).
+
+    // count all final states such that there is a path from init to final. count should be at least one
+    finalsReachable :- count({final | path(init, final), final is Final, init is Initial}) > 0.
+    conforms finalsReachable.
+
+    // assumption: init node not reachable from itself
+    initSelfLoopExists :- s is State, i is Initial(s), Transition(s, s).
+    conforms no initSelfLoopExists.
+
+    /*
+    Any state is reachable from the initial state
+    (if we assume that a node is reachable from itself,
+    otherwise every node except the initial state must be reachable)
+    */
+    /* we made the assumption that init has no self-transition
+     this means the count of states reachable from init must be equal
+    to the total count of the states minus one (the initial state)
+    */
+    totalStateCount ::= (c: Integer).
+    totalStateCount(c) :- c = count({s | s is State}).
+
+    allStatesReachable :-  i is Initial, count({s | s is State(_), path(i, s)}) = count({s | s is State}) - 1.
+    conforms allStatesReachable.
+}
+
+model GoodFSM1 of FSM {
+
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5),
+    t6 is Transition(s5, s6).
+
+}
+model GoodFSM2 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5),
+    t6 is Transition(s5, s6).
+
+}
+model GoodFSM3 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5),
+    t6 is Transition(s5, s6).
+}
+model BadFSM1 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5),
+    t6 is Transition(s5, s6).
+
+
+    // two initial states is bad.
+    init2 is Initial(s1).
+}
+model BadFSM2 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5),
+    t6 is Transition(s5, s6).
+
+    // init node reachable from self
+    t7 is Transition(s0, s0).
+}
+model BadFSM3 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+
+    init is Initial(s0).
+    final is Final(s6).
+
+    // not all nodes reachable from init. s3 skipped.
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s4),
+    t4 is Transition(s4, s5),
+    t5 is Transition(s5, s6).
+}
+
+model BadFSM4 of FSM {
+    s0 is State(0),
+    s1 is State(1),
+    s2 is State(2),
+    s3 is State(3),
+    s4 is State(4),
+    s5 is State(5).
+    s6 is State(6).
+    s7 is State(7).
+
+    init is Initial(s0).
+    final is Final(s6).
+    final2 is Final(s7).
+
+    t1 is Transition(s0, s1),
+    t2 is Transition(s1, s2),
+    t3 is Transition(s2, s3),
+    t4 is Transition(s3, s4),
+    t5 is Transition(s4, s5).
+
+    // no final state reachable from init.
+
+    // t6 is Transition(s5, s6).
+    // t7 is Transition(s5, s7).
+}
+/*
+execute the following to test model conformity
+
+query GoodFSM1 FSM.conforms
+query GoodFSM2 FSM.conforms
+query GoodFSM3 FSM.conforms
+query BadFSM1 FSM.conforms
+query BadFSM2 FSM.conforms
+query BadFSM3 FSM.conforms
+query BadFSM4 FSM.conforms
+*/

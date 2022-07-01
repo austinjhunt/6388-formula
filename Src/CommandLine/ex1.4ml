@@ -1,0 +1,96 @@
+// domain LogicGateDiagram
+// {
+//     // formula doesn't maintain unique ids, so you need to define one as an argument for each object you create
+//     Not ::= new (id: String, name: String).
+//     /* don't do this; problematic, doesn't really enforce containment rules
+//     Containment ::= new (container: String, contained: String).
+//     */
+//     ContainerConcept ::= new (id: String).
+//     Containment ::= new (ContainerConcept, Not).
+
+//     // alternatively pass container as argument to contained object
+//     Not ::= new (id: String, name: String, container: ContainerConcept).
+//      Not ::= new (id: String, name: String, container: ContainerConcept).
+
+//     // cardinality of containment addressed with the following
+//     hasless :- count({ b | b is Not(_, _, c), c is ContainerConcept}) < 2.
+
+//     hasmore :- count({ b | b is Not(_, _, c), c is ContainerConcept}) > 2.
+
+//     // if has less or has more then has issues
+//     hasissues :- hasless ; hasmore .
+
+//     // defining connections
+//     Connection ::= new(src: Not, dst: Not).
+
+//     // defining an optional pointer from a source ( a not gate) to a target
+//     Not ::= new (id: String, name: String, container: ContainerConcept, target: Conc + NIL).
+
+//     Gates ::= Not + And.
+
+//     conforms no hasissues.
+// }
+
+domain Digraphs
+{
+    V ::= new (lbl: Integer).
+    E ::= new (src: V, dst: V).
+    Thing ::= V + E.
+}
+
+domain DAGs extends Digraphs
+{
+    path ::= (V, V).
+    path(u, w) :- E(u, w); E(u, v), path (v, w).
+    distance ::= (V, V, d).
+    /*
+    when we see a question regarding distance from a to b
+    if edge from a to b and distance is 1 then distance function representation must be true
+    */
+    distance(a, b, d) :- a is V, b is V, E(a, b) , d = 1.
+    /* same as distance(a, b, d) :- distance(a, c, x), distance(c, b, 1), d = x + 1 */
+    distance(a, b, d) :- distance(a, c, x), E(c, b), d = x + 1.
+
+
+    // if you find a path from u to u that's a cycle and it does not conform
+    conforms no path(u, u).
+
+    // should be at least one pair of vertices where shortest path is 2.
+    conforms distance(a,b,2).
+
+    // conforms no distance(a, b, 1), a is V, b is V.
+
+
+    // if you wanted to state that graph does not have a path of 10
+    distanceten :- distance(a, b, 10).
+    // then you say that if that's true it doesn't conform
+    conforms no distanceten.
+}
+
+model Path10 of DAGs
+{
+    v0 is V(0),
+    v1 is V(1),
+    v2 is V(2),
+    v3 is V(3),
+    v4 is V(4),
+    v5 is V(5),
+    v6 is V(6),
+    v7 is V(7),
+    v8 is V(8),
+    v9 is V(9).
+
+
+    E(v0, v1),
+    E(v1, v2),
+    E(v2, v3),
+    E(v3, v4),
+    E(v4, v5),
+    E(v5, v6),
+    E(v6, v7),
+    E(v7, v8),
+    E(v8, v9).
+}
+/* run this to test in cli
+qr Path10 distance(V(0), V(2), 1)
+ */
