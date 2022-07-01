@@ -63,6 +63,10 @@ model MyBadFamily of Family {
 /* execute the following to test model conformity
 query MyGoodFamily Family.conforms
 query MyBadFamily Family.conforms
+
+produced expected results
+25 | Query |  Done  |  true  | 7/1/2022 6:43 PM |  0.01s   
+26 | Query |  Done  | false  | 7/1/2022 6:43 PM |  0.02s   
 */
 
 
@@ -92,6 +96,17 @@ domain AlgTrees {
     heightMoreThanTwo :- height(n, d), d > 2.
 
     conforms no heightMoreThanTwo.
+    
+    // if any of the nodes on the second level have children, too deep (> 2 levels)
+    // this is a test for the single value tree models, i.e. Root(Node(...)) that does not 
+    // use alias notation. above does not work for non-alias notation models.
+    tooDeep :- rn is Node(_, _), r is Root(rn), parent(rn.left.left, _);
+            rn is Node(_, _), r is Root(rn), parent(rn.left.right, _);
+            rn is Node(_, _), r is Root(rn), parent(rn.right.left, _);
+            rn is Node(_, _), r is Root(rn), parent(rn.right.right, _).
+    conforms no tooDeep. 
+    // still does not work :/ 
+    // the "Bad Trees" are showing false still for both "tooDeep" and for "heightMoreThanTwo"
 }
 
 model BadTree of AlgTrees {
@@ -114,6 +129,10 @@ model GoodTree of AlgTrees {
 execute the following to test model conformity.
 query BadTree AlgTrees.conforms
 query GoodTree AlgTrees.conforms
+
+produced expected results
+ 23 | Query |  Done  | false  | 7/1/2022 6:43 PM |  0.01s   
+ 24 | Query |  Done  |  true  | 7/1/2022 6:43 PM |  0.00s   
 */
 
 /* while the above two are properly
@@ -125,7 +144,7 @@ breaks the constraint defined in the domain.
 I am not sure how to fix that.
 */
 
-model GoodTree1Level of AlgTrees {
+model GoodTree1 of AlgTrees {
     Root(
         Node(
             Node(NIL, NIL),
@@ -133,7 +152,7 @@ model GoodTree1Level of AlgTrees {
         )
     ).
 }
-model GoodTree2Levels of AlgTrees {
+model GoodTree2 of AlgTrees {
     // 2 levels
     Root(
         Node(
@@ -143,7 +162,7 @@ model GoodTree2Levels of AlgTrees {
         )
     ).
 }
-model BadTree3Levels of AlgTrees {
+model BadTree1 of AlgTrees {
     // 3 levels
     Root(
         Node(
@@ -157,7 +176,7 @@ model BadTree3Levels of AlgTrees {
         )
     ).
 }
-model BadTree4 of AlgTrees {
+model BadTree2 of AlgTrees {
     Root(
         Node(
             Node(
@@ -179,11 +198,21 @@ model BadTree4 of AlgTrees {
 }
 /*
 execute the following to test model conformity.
-query BadTree AlgTrees.conforms
-query GoodTree1Level AlgTrees.conforms
-query GoodTree2Levels AlgTrees.conforms
-query BadTree3Levels AlgTrees.conforms
-query BadTree4 AlgTrees.conforms
+query GoodTree1 AlgTrees.conforms
+query GoodTree2 AlgTrees.conforms
+query BadTree1 AlgTrees.conforms
+query BadTree2 AlgTrees.conforms
+
+These did not produce the expected results, and I 
+believe it is because these models are not using the alias notation
+but rather defining the entire tree as a single value starting with Root(...)
+
+technically these first two are correct (they do conform)
+but i don't think it's right for the right reason 
+29 | Query |  Done  |  true  | 7/1/2022 6:47 PM |  0.00s   
+30 | Query |  Done  |  true  | 7/1/2022 6:47 PM |  0.00s   
+31 | Query |  Done  |  true  | 7/1/2022 6:47 PM |  0.00s   
+32 | Query |  Done  |  true  | 7/1/2022 6:47 PM |  0.00s 
 */
 
 /* Task 3) FSM
@@ -209,20 +238,20 @@ domain FSM {
     exactlyOneInitial :- count({init | init is Initial}) = 1.
     conforms exactlyOneInitial.
 
-    // from the initial state it is possible to reach at least one final state.
-    path ::= (src: Initial + State, dest: Final + State).
-    // there's either a direct transition from init to final or there is a path of transitions from init to final
-    path(init, final) :- i is State, f is State, init is Initial(i), final is Final(f), Transition(i, f) ;
-                        i is State, f is State, init is Initial(i), final is Final(f), intermediate is State, Transition(i, intermediate), path(intermediate, f).
+    
+    path ::= (src: State, dest: State).
+    path(src, dest) :- Transition(src, dest) ; intermediate is State, Transition(src, intermediate), path(intermediate, dest). 
 
-    // count all final states such that there is a path from init to final. count should be at least one
-    finalsReachable :- count({final | path(init, final), final is Final, init is Initial}) > 0.
-    conforms finalsReachable.
+    // from the initial state it is possible to reach at least one final state
+    finalReachable :- s1 is State, s2 is State, init is Initial(s1), count({f | f is Final(s2), path(s1, s2)}) >= 1.
+    conforms finalReachable.
 
     // assumption: init node not reachable from itself
-    initSelfLoopExists :- s is State, i is Initial(s), Transition(s, s).
+    initSelfLoopExists :- s is State, i is Initial(s), path(s, s). 
     conforms no initSelfLoopExists.
 
+    reachable ::= (State, Integer). 
+    reachable(s1, c) :- i is Initial(s1), c = count({s | path(s1, s)}). 
     /*
     Any state is reachable from the initial state
     (if we assume that a node is reachable from itself,
@@ -235,7 +264,8 @@ domain FSM {
     totalStateCount ::= (c: Integer).
     totalStateCount(c) :- c = count({s | s is State}).
 
-    allStatesReachable :-  i is Initial, count({s | s is State(_), path(i, s)}) = count({s | s is State}) - 1.
+    // allStatesReachable :-  s1 is State, i is Initial(s1), count({s | s is State(_), path(i, s)}) = count({s | s is State}) - 1.
+    allStatesReachable :- s1 is State, i is Initial(s1), totalStateCount(totalCount), reachable(s1, reachableCount), reachableCount = totalCount - 1. 
     conforms allStatesReachable.
 }
 
@@ -399,4 +429,13 @@ query BadFSM1 FSM.conforms
 query BadFSM2 FSM.conforms
 query BadFSM3 FSM.conforms
 query BadFSM4 FSM.conforms
+
+All of these produced expected results
+ 16 | Query |  Done  |  true  | 7/1/2022 6:41 PM |  0.03s   
+ 17 | Query |  Done  |  true  | 7/1/2022 6:41 PM |  0.04s   
+ 18 | Query |  Done  |  true  | 7/1/2022 6:41 PM |  0.05s   
+ 19 | Query |  Done  | false  | 7/1/2022 6:41 PM |  0.03s   
+ 20 | Query |  Done  | false  | 7/1/2022 6:42 PM |  0.03s   
+ 21 | Query |  Done  | false  | 7/1/2022 6:42 PM |  0.02s   
+ 22 | Query |  Done  | false  | 7/1/2022 6:42 PM |  0.02s  
 */
